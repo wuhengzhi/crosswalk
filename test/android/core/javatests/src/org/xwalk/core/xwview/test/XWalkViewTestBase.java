@@ -17,6 +17,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.Timer;
 
+import org.chromium.base.test.util.InstrumentationUtils;
 import org.chromium.content.browser.LoadUrlParams;
 import org.chromium.content.browser.test.util.CallbackHelper;
 import org.xwalk.core.XWalkContent;
@@ -64,6 +65,29 @@ public class XWalkViewTestBase
                 mXWalkView.loadUrl(url);
             }
         });
+    }
+
+    protected void postUrlSync(final String url, byte[] postData) throws Exception {
+        CallbackHelper pageFinishedHelper = mTestContentsClient.getOnPageFinishedHelper();
+        int currentCallCount = pageFinishedHelper.getCallCount();
+        postUrlAsync(url, postData);
+        pageFinishedHelper.waitForCallback(currentCallCount, 1, WAIT_TIMEOUT_SECONDS,
+                TimeUnit.SECONDS);
+    }
+
+    protected void postUrlAsync(final String url, byte[] postData) throws Exception {
+        class PostUrl implements Runnable {
+            byte[] mPostData;
+            public PostUrl(byte[] postData) {
+                mPostData = postData;
+            }
+            @Override
+            public void run() {
+                mXWalkView.getXWalkViewContentForTest().getContentViewCoreForTest(
+                        ).loadUrl(LoadUrlParams.createLoadHttpPostParams(url, mPostData));
+            }
+        }
+        getInstrumentation().runOnMainSync(new PostUrl(postData));
     }
 
     protected void loadDataSync(final String data, final String mimeType,
@@ -125,6 +149,27 @@ public class XWalkViewTestBase
     protected void loadAssetFile(String fileName) throws Exception {
         String fileContent = getFileContent(fileName);
         loadDataSync(fileContent, "text/html", false);
+    }
+
+
+    protected boolean canGoBackOnUiThread() throws Throwable {
+        return InstrumentationUtils.runOnMainSyncAndGetResult(
+                getInstrumentation(), new Callable<Boolean>() {
+            @Override
+            public Boolean call() {
+                return mXWalkView.canGoBack();
+            }
+        });
+    }
+
+    protected boolean canGoForwardOnUiThread() throws Throwable {
+        return InstrumentationUtils.runOnMainSyncAndGetResult(
+                getInstrumentation(), new Callable<Boolean>() {
+            @Override
+            public Boolean call() {
+                return mXWalkView.canGoForward();
+            }
+        });
     }
 
     protected XWalkView getXWalkView() {

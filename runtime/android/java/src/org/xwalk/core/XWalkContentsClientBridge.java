@@ -172,7 +172,9 @@ public class XWalkContentsClientBridge extends XWalkContentsClient
 
     @Override
     public void onFormResubmission(Message dontResend, Message resend) {
-        dontResend.sendToTarget();
+        if (mXWalkClient != null && mXWalkView != null) {
+            mXWalkClient.onFormResubmission(mXWalkView, dontResend, resend);
+        }
     }
 
     @Override
