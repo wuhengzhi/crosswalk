@@ -21,16 +21,19 @@ import org.chromium.base.CalledByNative;
 import org.chromium.base.JNINamespace;
 import org.chromium.base.ThreadUtils;
 import org.chromium.content.browser.ContentVideoViewClient;
+import org.chromium.content.browser.ContentViewDownloadDelegate;
 
 // Help bridge callback in XWalkContentsClient to XWalkViewClient and
 // WebChromeClient; Also handle the JNI conmmunication logic.
 @JNINamespace("xwalk")
-public class XWalkContentsClientBridge extends XWalkContentsClient {
+public class XWalkContentsClientBridge extends XWalkContentsClient
+        implements ContentViewDownloadDelegate {
 
     private XWalkView mXWalkView;
     private XWalkClient mXWalkClient;
     private XWalkWebChromeClient mXWalkWebChromeClient;
     private Bitmap mFavicon;
+    private DownloadListener mDownloadListener;
 
     // The native peer of the object
     private int mNativeContentsClientBridge;
@@ -169,7 +172,9 @@ public class XWalkContentsClientBridge extends XWalkContentsClient {
 
     @Override
     public void onFormResubmission(Message dontResend, Message resend) {
-        dontResend.sendToTarget();
+        if (mXWalkClient != null && mXWalkView != null) {
+            mXWalkClient.onFormResubmission(mXWalkView, dontResend, resend);
+        }
     }
 
     @Override
@@ -299,6 +304,25 @@ public class XWalkContentsClientBridge extends XWalkContentsClient {
     void cancelJsResult(int id) {
         if (mNativeContentsClientBridge == 0) return;
         nativeCancelJsResult(mNativeContentsClientBridge, id);
+    }
+
+    void setDownloadListener(DownloadListener listener) {
+        mDownloadListener = listener;
+    }
+
+    // Implement ContentViewDownloadDelegate methods.
+    public void requestHttpGetDownload(String url, String userAgent, String contentDisposition,
+        String mimetype, String cookie, String referer, long contentLength) {
+        if (mDownloadListener != null) {
+            mDownloadListener.onDownloadStart(url, userAgent,
+                    contentDisposition, mimetype, contentLength);
+        }
+    }
+
+    public void onDownloadStarted(String filename, String mimeType) {
+    }
+
+    public void onDangerousDownload(String filename, int downloadId) {
     }
 
     //--------------------------------------------------------------------------------------------

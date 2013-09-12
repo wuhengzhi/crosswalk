@@ -60,6 +60,7 @@ class XWalkCoreProviderImpl extends XWalkRuntimeViewProvider {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        mXwalkView.onDestroy();
     }
 
     @Override
@@ -77,6 +78,11 @@ class XWalkCoreProviderImpl extends XWalkRuntimeViewProvider {
     @Override
     public void disableRemoteDebugging() {
         mXwalkView.disableRemoteDebugging();
+    }
+
+    @Override
+    public String getVersion() {
+        return mXwalkView.getVersion();
     }
 
     @Override

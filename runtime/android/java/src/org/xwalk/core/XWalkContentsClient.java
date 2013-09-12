@@ -70,7 +70,7 @@ public abstract class XWalkContentsClient extends ContentViewClient {
         @Override
         public void didFinishLoad(long frameId, String validatedUrl, boolean isMainFrame) {
             if (isMainFrame) {
-                XWalkContentsClient.this.onPageFinished(validatedUrl);
+                XWalkContentsClient.this.didFinishLoad(validatedUrl);
             }
         }
     }
