@@ -5,6 +5,7 @@
 
 package org.xwalk.core.xwview.test;
 
+import android.net.Uri;
 import android.util.Log;
 import android.webkit.ValueCallback;
 import android.webkit.WebResourceResponse;
@@ -192,6 +193,76 @@ class TestHelperBridge {
         }
     }
 
+    public class OpenFileChooserHelper extends CallbackHelper {
+        private ValueCallback<Uri> mCallback;
+
+        public ValueCallback<Uri> getCallback() {
+            assert getCallCount() > 0;
+            return mCallback;
+        }
+
+        public void notifyCalled(ValueCallback<Uri> callback) {
+            mCallback = callback;
+            notifyCalled();
+        }
+    }
+
+    public class OnRequestFocusHelper extends CallbackHelper {
+        private boolean mCalled = false;
+
+        public boolean getCalled() {
+            assert getCallCount() > 0;
+            return mCalled;
+        }
+
+        public void notifyCalled(boolean called) {
+            mCalled = called;
+            notifyCalled();
+        }
+    }
+
+    public class OnJavascriptModalDialogHelper extends CallbackHelper {
+        private String mMessage;
+
+        public String getMessage() {
+            assert getCallCount() > 0;
+            return mMessage;
+        }
+
+        public void notifyCalled(String message) {
+            mMessage = message;
+            notifyCalled();
+        }
+    }
+
+    public class OnFullscreenToggledHelper extends CallbackHelper {
+        private boolean mEnterFullscreen = false;
+
+        public boolean getEnterFullscreen() {
+            assert getCallCount() > 0;
+            return mEnterFullscreen;
+        }
+
+        public void notifyCalled(boolean enterFullscreen) {
+            mEnterFullscreen = enterFullscreen;
+            notifyCalled();
+        }
+    }
+
+    public class OnScaleChangedHelper extends CallbackHelper {
+        private float mScale;
+
+        public float getScale() {
+            assert getCallCount() > 0;
+            return mScale;
+        }
+
+        public void notifyCalled(float scale) {
+            mScale = scale;
+            notifyCalled();
+        }
+    }
+
     private String mChangedTitle;
     private final OnPageStartedHelper mOnPageStartedHelper;
     private final OnPageFinishedHelper mOnPageFinishedHelper;
@@ -205,6 +276,11 @@ class TestHelperBridge {
     private final OnJavascriptCloseWindowHelper mOnJavascriptCloseWindowHelper;
     private final OnProgressChangedHelper mOnProgressChangedHelper;
     private final ShouldOverrideUrlLoadingHelper mShouldOverrideUrlLoadingHelper;
+    private final OpenFileChooserHelper mOpenFileChooserHelper;
+    private final OnRequestFocusHelper mOnRequestFocusHelper;
+    private final OnJavascriptModalDialogHelper mOnJavascriptModalDialogHelper;
+    private final OnFullscreenToggledHelper mOnFullscreenToggledHelper;
+    private final OnScaleChangedHelper mOnScaleChangedHelper;
 
     public TestHelperBridge() {
         mOnPageStartedHelper = new OnPageStartedHelper();
@@ -217,6 +293,11 @@ class TestHelperBridge {
         mOnJavascriptCloseWindowHelper = new OnJavascriptCloseWindowHelper();
         mOnProgressChangedHelper = new OnProgressChangedHelper();
         mShouldOverrideUrlLoadingHelper = new ShouldOverrideUrlLoadingHelper();
+        mOpenFileChooserHelper = new OpenFileChooserHelper();
+        mOnRequestFocusHelper = new OnRequestFocusHelper();
+        mOnJavascriptModalDialogHelper = new OnJavascriptModalDialogHelper();
+        mOnFullscreenToggledHelper = new OnFullscreenToggledHelper();
+        mOnScaleChangedHelper = new OnScaleChangedHelper();
     }
 
     public OnPageStartedHelper getOnPageStartedHelper() {
@@ -257,6 +338,26 @@ class TestHelperBridge {
 
     public ShouldOverrideUrlLoadingHelper getShouldOverrideUrlLoadingHelper() {
         return mShouldOverrideUrlLoadingHelper;
+    }
+
+    public OpenFileChooserHelper getOpenFileChooserHelper() {
+        return mOpenFileChooserHelper;
+    }
+
+    public OnRequestFocusHelper getOnRequestFocusHelper() {
+        return mOnRequestFocusHelper;
+    }
+
+    public OnJavascriptModalDialogHelper getOnJavascriptModalDialogHelper() {
+        return mOnJavascriptModalDialogHelper;
+    }
+
+    public OnFullscreenToggledHelper getOnFullscreenToggledHelper() {
+        return mOnFullscreenToggledHelper;
+    }
+
+    public OnScaleChangedHelper getOnScaleChangedHelper() {
+        return mOnScaleChangedHelper;
     }
 
     public void onTitleChanged(String title) {
@@ -303,5 +404,26 @@ class TestHelperBridge {
             mShouldOverrideUrlLoadingHelper.getShouldOverrideUrlLoadingReturnValue();
         mShouldOverrideUrlLoadingHelper.notifyCalled(url);
         return returnValue;
+    }
+
+    public void openFileChooser(ValueCallback<Uri> uploadFile) {
+        mOpenFileChooserHelper.notifyCalled(uploadFile);
+    }
+
+    public void onRequestFocus() {
+        mOnRequestFocusHelper.notifyCalled(true);
+    }
+
+    public boolean onJavascriptModalDialog(String message) {
+        mOnJavascriptModalDialogHelper.notifyCalled(message);
+        return true;
+    }
+
+    public void onFullscreenToggled(boolean enterFullscreen) {
+        mOnFullscreenToggledHelper.notifyCalled(enterFullscreen);
+    }
+
+    public void onScaleChanged(float scale) {
+        mOnScaleChangedHelper.notifyCalled(scale);
     }
 }

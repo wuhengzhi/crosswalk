@@ -109,10 +109,6 @@ abstract class XWalkContentsClient extends ContentViewClient {
         mDIPScale = dipScale;
     }
 
-    public double getDIPScale() {
-        return mDIPScale;
-    }
-
     final XWalkContentsClientCallbackHelper getCallbackHelper() {
         return mCallbackHelper;
     }
