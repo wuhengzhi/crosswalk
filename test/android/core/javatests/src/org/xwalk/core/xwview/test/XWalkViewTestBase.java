@@ -572,4 +572,23 @@ public class XWalkViewTestBase
             }
         });
     }
+
+    protected boolean hasEnteredFullScreenOnUiThread() throws Throwable {
+        return runTestOnUiThreadAndGetResult(new Callable<Boolean>() {
+            @Override
+            public Boolean call() {
+                return mXWalkView.hasEnteredFullscreen();
+            }
+        });
+    }
+
+    protected void leaveFullscreenOnUiThread() throws Throwable {
+        getInstrumentation().runOnMainSync(new Runnable() {
+            @Override
+            public void run() {
+                mXWalkView.leaveFullscreen();
+            }
+        });
+    }
+
 }
