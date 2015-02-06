@@ -77,6 +77,11 @@ class XWalkContent {
                                  jboolean value,
                                  jstring origin);
 
+  void CreateUserPrefServiceIfNecessary(content::WebContents* contents);
+  void InitAutofillIfNecessary(bool enabled);
+  void SetXWalkAutofillClient(jobject client);
+  void SetSaveFormData(bool enabled);
+
  private:
   JavaObjectWeakGlobalRef java_ref_;
   // TODO(guangzhen): The WebContentsDelegate need to take ownership of

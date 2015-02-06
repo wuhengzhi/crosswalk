@@ -75,6 +75,8 @@ public class XWalkSettings {
     private static final int MINIMUM_FONT_SIZE = 1;
     private static final int MAXIMUM_FONT_SIZE = 72;
 
+    private boolean mAutoCompleteEnabled = true;
+
     static class LazyDefaultUserAgent{
         private static final String sInstance = nativeGetDefaultUserAgent();
     }
@@ -656,6 +658,40 @@ public class XWalkSettings {
         }
     }
 
+    /**
+     * See {@link android.webkit.WebSettings#setSaveFormData}.
+     */
+    public void setSaveFormData(final boolean enable) {
+        synchronized (mXWalkSettingsLock) {
+            if (mAutoCompleteEnabled != enable) {
+                mAutoCompleteEnabled = enable;
+                mEventHandler.maybeRunOnUiThreadBlocking(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (mNativeXWalkSettings != 0) {
+                            nativeUpdateFormDataPreferences(mNativeXWalkSettings);
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    /**
+     * See {@link android.webkit.WebSettings#getSaveFormData}.
+     */
+    public boolean getSaveFormData() {
+        synchronized (mXWalkSettingsLock) {
+            return getSaveFormDataLocked();
+        }
+    }
+
+    @CalledByNative
+    private boolean getSaveFormDataLocked() {
+        assert Thread.holdsLock(mXWalkSettingsLock);
+        return mAutoCompleteEnabled;
+    }
+
     private native long nativeInit(long webContentsPtr);
 
     private native void nativeDestroy(long nativeXWalkSettings);
@@ -667,4 +703,6 @@ public class XWalkSettings {
     private native void nativeUpdateUserAgent(long nativeXWalkSettings);
 
     private native void nativeUpdateWebkitPreferences(long nativeXWalkSettings);
+
+    private native void nativeUpdateFormDataPreferences(long nativeXWalkSettings);
 }

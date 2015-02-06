@@ -70,6 +70,7 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
     private NavigationController mNavigationController;
     private WebContents mWebContents;
     private boolean mIsLoaded = false;
+    private XWalkAutofillClient mXWalkAutofillClient;
 
     long mNativeContent;
     long mNativeWebContents;
@@ -776,6 +777,21 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
         if (mContentViewRenderView != null) {
             mContentViewRenderView.setOverlayVideoMode(enabled);
         }
+    }
+
+    /**
+     * @see android.webkit.WebView#clearFormData()
+     */
+    public void hideAutofillPopup() {
+        if (mXWalkAutofillClient != null) {
+            mXWalkAutofillClient.hideAutofillPopup();
+        }
+    }
+
+    @CalledByNative
+    private void setXWalkAutofillClient(XWalkAutofillClient client) {
+        mXWalkAutofillClient = client;
+        client.init(mContentViewCore);
     }
 
     private native long nativeInit();

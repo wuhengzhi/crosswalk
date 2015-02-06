@@ -12,11 +12,15 @@
 
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/android/locale_utils.h"
 #include "base/base_paths_android.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/path_service.h"
 #include "base/pickle.h"
+#include "components/autofill/content/browser/content_autofill_driver_factory.h"
+#include "components/autofill/core/browser/autofill_manager.h"
+#include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -25,11 +29,11 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/url_constants.h"
-#include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "xwalk/application/common/application_manifest_constants.h"
 #include "xwalk/application/common/manifest.h"
 #include "xwalk/runtime/browser/android/net_disk_cache_remover.h"
 #include "xwalk/runtime/browser/android/state_serializer.h"
+#include "xwalk/runtime/browser/android/xwalk_autofill_client.h"
 #include "xwalk/runtime/browser/android/xwalk_contents_client_bridge.h"
 #include "xwalk/runtime/browser/android/xwalk_contents_client_bridge_base.h"
 #include "xwalk/runtime/browser/android/xwalk_contents_io_thread_client_impl.h"
@@ -39,6 +43,8 @@
 #include "xwalk/runtime/browser/xwalk_runner.h"
 #include "jni/XWalkContent_jni.h"
 
+using autofill::ContentAutofillDriverFactory;
+using autofill::AutofillManager;
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ScopedJavaLocalRef;
@@ -127,6 +133,54 @@ XWalkContent* XWalkContent::FromWebContents(
 
 XWalkContent::XWalkContent(scoped_ptr<content::WebContents> web_contents)
     : web_contents_(web_contents.Pass()) {
+  WebContents* contents = web_contents_.get();
+  XWalkAutofillClient* autofill_manager_delegate =
+      XWalkAutofillClient::FromWebContents(contents);
+  CreateUserPrefServiceIfNecessary(contents);
+  if (autofill_manager_delegate)
+    InitAutofillIfNecessary(autofill_manager_delegate->GetSaveFormData());
+}
+
+void XWalkContent::CreateUserPrefServiceIfNecessary(
+    content::WebContents* contents) {
+  XWalkBrowserContext* browser_context =
+      XWalkBrowserContext::FromWebContents(contents);
+  browser_context->CreateUserPrefServiceIfNecessary();
+}
+
+void XWalkContent::InitAutofillIfNecessary(bool enabled) {
+  // Do not initialize if the feature is not enabled.
+  if (!enabled) return;
+  // Check if the autofill driver factory already exists.
+  content::WebContents* web_contents = web_contents_.get();
+  if (XWalkAutofillClient::FromWebContents(web_contents)) return;
+
+  CreateUserPrefServiceIfNecessary(web_contents);
+  XWalkAutofillClient::CreateForWebContents(web_contents);
+  ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
+      web_contents,
+      XWalkAutofillClient::FromWebContents(web_contents),
+      base::android::GetDefaultLocale(),
+      AutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER);
+}
+
+void XWalkContent::SetXWalkAutofillClient(jobject client) {
+  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
+  if (obj.is_null()) return;
+  Java_XWalkContent_setXWalkAutofillClient(env, obj.obj(), client);
+}
+
+void XWalkContent::SetSaveFormData(bool enabled) {
+  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  InitAutofillIfNecessary(enabled);
+  // We need to check for the existence, since autofill_manager_delegate
+  // may not be created when the setting is false.
+  if (XWalkAutofillClient::FromWebContents(web_contents_.get())) {
+    XWalkAutofillClient::FromWebContents(web_contents_.get())->
+        SetSaveFormData(enabled);
+  }
 }
 
 XWalkContent::~XWalkContent() {
