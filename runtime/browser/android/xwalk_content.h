@@ -12,6 +12,7 @@
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/prefs/pref_change_registrar.h"
 #include "xwalk/runtime/browser/android/renderer_host/xwalk_render_view_host_ext.h"
 
 using base::android::ScopedJavaLocalRef;
@@ -81,6 +82,7 @@ class XWalkContent {
   void InitAutofillIfNecessary(bool enabled);
   void SetXWalkAutofillClient(jobject client);
   void SetSaveFormData(bool enabled);
+  void UpdateRendererPreferences();
 
  private:
   JavaObjectWeakGlobalRef java_ref_;
@@ -102,6 +104,8 @@ class XWalkContent {
           OriginCallback;
   // The first element in the list is always the currently pending request.
   std::list<OriginCallback> pending_geolocation_prompts_;
+
+  PrefChangeRegistrar pref_change_registrar_;
 };
 
 bool RegisterXWalkContent(JNIEnv* env);

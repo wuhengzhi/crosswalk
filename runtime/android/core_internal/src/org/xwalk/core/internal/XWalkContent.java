@@ -26,6 +26,7 @@ import android.widget.FrameLayout;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
+import java.util.Locale;
 
 import org.chromium.base.CalledByNative;
 import org.chromium.base.JNINamespace;
@@ -184,6 +185,9 @@ class XWalkContent extends FrameLayout implements XWalkPreferencesInternal.KeyVa
         mSettings.setAllowFileAccessFromFileURLs(true);
         // Enable this by default to suppport new window creation
         mSettings.setSupportMultipleWindows(true);
+        String acceptLanguages = Locale.getDefault().toString();
+        Log.e("XWalkContent.java", "setNativeContent acceptLanguages=" + acceptLanguages);
+        mSettings.setAcceptLanguages(acceptLanguages);
 
         nativeSetJavaPeers(mNativeContent, this, mXWalkContentsDelegateAdapter, mContentsClientBridge,
                 mIoThreadClient, mContentsClientBridge.getInterceptNavigationDelegate());

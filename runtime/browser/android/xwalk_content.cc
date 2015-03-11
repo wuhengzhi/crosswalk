@@ -18,9 +18,11 @@
 #include "base/json/json_writer.h"
 #include "base/path_service.h"
 #include "base/pickle.h"
+#include "base/prefs/pref_service.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
+#include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -139,6 +141,25 @@ XWalkContent::XWalkContent(scoped_ptr<content::WebContents> web_contents)
   CreateUserPrefServiceIfNecessary(contents);
   if (autofill_manager_delegate)
     InitAutofillIfNecessary(autofill_manager_delegate->GetSaveFormData());
+  PrefService* pref_service = user_prefs::UserPrefs::Get(XWalkBrowserContext::GetDefault());
+  LOG(INFO) << "xwalk_content.cc XWalkContent init pref_change_registrar_ pref_service=" << pref_service;
+  pref_change_registrar_.Init(pref_service);
+  if (pref_service) {
+    base::Closure renderer_callback = base::Bind(
+        &XWalkContent::UpdateRendererPreferences, base::Unretained(this));
+    LOG(INFO) << "xwalk_content.cc XWalkContent Add renderer_callback";
+    pref_change_registrar_.Add("intl.accept_languages", renderer_callback);
+  }
+}
+
+void XWalkContent::UpdateRendererPreferences() {
+  LOG(INFO) << "xwalk_content.cc UpdateRendererPreferences in.........";
+  content::RendererPreferences* prefs =
+      web_contents_->GetMutableRendererPrefs();
+  PrefService* pref_service = user_prefs::UserPrefs::Get(XWalkBrowserContext::GetDefault());
+  prefs->accept_languages = pref_service->GetString("intl.accept_languages");
+  LOG(INFO) << "xwalk_content.cc UpdateRendererPreferences call SyncRendererPrefs";
+  web_contents_->GetRenderViewHost()->SyncRendererPrefs();
 }
 
 void XWalkContent::CreateUserPrefServiceIfNecessary(

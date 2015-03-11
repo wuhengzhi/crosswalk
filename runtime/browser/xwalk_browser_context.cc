@@ -371,6 +371,7 @@ void XWalkBrowserContext::CreateUserPrefServiceIfNecessary() {
       autofill::prefs::kAutofillPositiveUploadRate, 0.0);
   pref_registry->RegisterDoublePref(
       autofill::prefs::kAutofillNegativeUploadRate, 0.0);
+  pref_registry->RegisterStringPref("intl.accept_languages", "");
 
   base::PrefServiceFactory pref_service_factory;
   pref_service_factory.set_user_prefs(make_scoped_refptr(new XWalkPrefStore()));
