@@ -11,6 +11,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.Process;
 import android.provider.Settings;
+import android.util.Log;
 import android.webkit.WebSettings;
 
 import org.chromium.base.annotations.CalledByNative;
@@ -119,8 +120,6 @@ public class XWalkSettingsInternal {
     // The native side of this object.
     private long mNativeXWalkSettings = 0;
 
-    // A flag to avoid sending superfluous synchronization messages.
-    private boolean mIsUpdateWebkitPrefsMessagePending = false;
     // Custom handler that queues messages to call native code on the UI thread.
     private final EventHandler mEventHandler;
 
@@ -150,10 +149,12 @@ public class XWalkSettingsInternal {
 
     // Class to handle messages to be processed on the UI thread.
     private class EventHandler {
-        // Message id for updating Webkit preferences
-        private static final int UPDATE_WEBKIT_PREFERENCES = 0;
+        // Message id for running a Runnable with mXWalkSettingsLock held.
+        private static final int RUN_RUNNABLE_BLOCKING = 0;
         // Actual UI thread handler
         private Handler mHandler;
+        // Synchronization flag.
+        private boolean mSynchronizationPending = false;
 
         EventHandler() {
         }
@@ -161,24 +162,40 @@ public class XWalkSettingsInternal {
         void bindUiThread() {
             if (mHandler != null) return;
             mHandler = new Handler(ThreadUtils.getUiThreadLooper()) {
-                    @Override
-                    public void handleMessage(Message msg) {
-                        switch (msg.what) {
-                            case UPDATE_WEBKIT_PREFERENCES:
-                                synchronized (mXWalkSettingsLock) {
-                                    updateWebkitPreferencesOnUiThread();
-                                    mIsUpdateWebkitPrefsMessagePending = false;
-                                    mXWalkSettingsLock.notifyAll();
+                @Override
+                public void handleMessage(Message msg) {
+                    switch (msg.what) {
+                        case RUN_RUNNABLE_BLOCKING:
+                            synchronized (mXWalkSettingsLock) {
+                                if (mXWalkSettingsLock != 0) {
+                                    ((Runnable) msg.obj).run();
                                 }
-                                break;
-                        }
+                                mSynchronizationPending = false;
+                                mXWalkSettingsLock.notifyAll();
+                            }
+                            break;
                     }
-                };
+                }
+            };
         }
 
-        void maybeRunOnUiThreadBlocking(Runnable r) {
-            if (mHandler != null) {
-                ThreadUtils.runOnUiThreadBlocking(r);
+        void runOnUiThreadBlockingAndLocked(Runnable r) {
+            assert Thread.holdsLock(mXWalkSettingsLock);
+            if (mHandler == null) return;
+            if (ThreadUtils.runningOnUiThread()) {
+                r.run();
+            } else {
+                assert !mSynchronizationPending;
+                mSynchronizationPending = true;
+                mHandler.sendMessage(Message.obtain(null, RUN_RUNNABLE_BLOCKING, r));
+                try {
+                    while (mSynchronizationPending) {
+                        mXWalkSettingsLock.wait();
+                    }
+                } catch (InterruptedException e) {
+                    Log.e(TAG, "Interrupted waiting a Runnable to complete", e);
+                    mSynchronizationPending = false;
+                }
             }
         }
 
@@ -188,27 +205,13 @@ public class XWalkSettingsInternal {
             }
         }
 
-        private void updateWebkitPreferencesLocked() {
-            assert Thread.holdsLock(mXWalkSettingsLock);
-            if (mNativeXWalkSettings == 0) return;
-            if (mHandler == null) return;
-            if (ThreadUtils.runningOnUiThread()) {
-                updateWebkitPreferencesOnUiThread();
-            } else {
-                // We're being called on a background thread, so post a message.
-                if (mIsUpdateWebkitPrefsMessagePending) {
-                    return;
+        void updateWebkitPreferencesLocked() {
+            runOnUiThreadBlockingAndLocked(new Runnable() {
+                @Override
+                public void run() {
+                    updateWebkitPreferencesOnUiThreadLocked();
                 }
-                mIsUpdateWebkitPrefsMessagePending = true;
-                mHandler.sendMessage(Message.obtain(null, UPDATE_WEBKIT_PREFERENCES));
-                // We must block until the settings have been sync'd to native to
-                // ensure that they have taken effect.
-                try {
-                    while (mIsUpdateWebkitPrefsMessagePending) {
-                        mXWalkSettingsLock.wait();
-                    }
-                } catch (InterruptedException e) {}
-            }
+            });
         }
     }
 
@@ -782,6 +785,7 @@ public class XWalkSettingsInternal {
      */
     @CalledByNative
     private boolean getAppCacheEnabled() {
+        assert Thread.holdsLock(mXWalkSettingsLock);
         // When no app cache path is set, use chromium default cache path.
         return mAppCacheEnabled;
     }
@@ -919,7 +923,7 @@ public class XWalkSettingsInternal {
                 mUserAgent = userAgent;
             }
             if (!oldUserAgent.equals(mUserAgent)) {
-                mEventHandler.maybeRunOnUiThreadBlocking(new Runnable() {
+                mEventHandler.runOnUiThreadBlockingAndLocked(new Runnable() {
                     @Override
                     public void run() {
                         if (mNativeXWalkSettings != 0) {
@@ -945,6 +949,7 @@ public class XWalkSettingsInternal {
 
     @CalledByNative
     private String getUserAgentLocked() {
+        assert Thread.holdsLock(mXWalkSettingsLock);
         return mUserAgent;
     }
 
@@ -964,11 +969,10 @@ public class XWalkSettingsInternal {
         }
     }
 
-    private void updateWebkitPreferencesOnUiThread() {
-        if (mNativeXWalkSettings != 0) {
-            ThreadUtils.assertOnUiThread();
-            nativeUpdateWebkitPreferences(mNativeXWalkSettings);
-        }
+    private void updateWebkitPreferencesOnUiThreadLocked() {
+        assert mEventHandler.mHandler != null;
+        ThreadUtils.assertOnUiThread();
+        nativeUpdateWebkitPreferences(mNativeXWalkSettings);
     }
 
      /**
@@ -981,7 +985,7 @@ public class XWalkSettingsInternal {
         synchronized (mXWalkSettingsLock) {
             if (mAcceptLanguages == acceptLanguages) return;
             mAcceptLanguages = acceptLanguages;
-            mEventHandler.maybeRunOnUiThreadBlocking(new Runnable() {
+            mEventHandler.runOnUiThreadBlockingAndLocked(new Runnable() {
                 @Override
                 public void run() {
                     if (mNativeXWalkSettings != 0) {
@@ -1015,7 +1019,7 @@ public class XWalkSettingsInternal {
         synchronized (mXWalkSettingsLock) {
             if (mAutoCompleteEnabled == enable) return;
             mAutoCompleteEnabled = enable;
-            mEventHandler.maybeRunOnUiThreadBlocking(new Runnable() {
+            mEventHandler.runOnUiThreadBlockingAndLocked(new Runnable() {
                 @Override
                 public void run() {
                     if (mNativeXWalkSettings != 0) {
@@ -1041,11 +1045,13 @@ public class XWalkSettingsInternal {
 
     @CalledByNative
     private String getAcceptLanguagesLocked() {
+        assert Thread.holdsLock(mXWalkSettingsLock);
         return mAcceptLanguages;
     }
 
     @CalledByNative
     private boolean getSaveFormDataLocked() {
+        assert Thread.holdsLock(mXWalkSettingsLock);
         return mAutoCompleteEnabled;
     }
 
@@ -1067,7 +1073,7 @@ public class XWalkSettingsInternal {
         synchronized (mXWalkSettingsLock) {
             if (mInitialPageScalePercent == scaleInPercent) return;
             mInitialPageScalePercent = scaleInPercent;
-            mEventHandler.maybeRunOnUiThreadBlocking(new Runnable() {
+            mEventHandler.runOnUiThreadBlockingAndLocked(new Runnable() {
                 @Override
                 public void run() {
                     if (mNativeXWalkSettings != 0) {
@@ -1391,11 +1397,11 @@ public class XWalkSettingsInternal {
         synchronized (mXWalkSettingsLock) {
             if (mLoadWithOverviewMode == overview) return;
             mLoadWithOverviewMode = overview;
-            mEventHandler.maybeRunOnUiThreadBlocking(new Runnable() {
+            mEventHandler.runOnUiThreadBlockingAndLocked(new Runnable() {
                 @Override
                 public void run() {
                     if (mNativeXWalkSettings != 0) {
-                        mEventHandler.updateWebkitPreferencesLocked();
+                        updateWebkitPreferencesOnUiThreadLocked();
                         nativeResetScrollAndScaleState(mNativeXWalkSettings);
                     }
                 }
