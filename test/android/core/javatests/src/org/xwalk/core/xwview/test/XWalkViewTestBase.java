@@ -870,7 +870,14 @@ public class XWalkViewTestBase
     }
 
     public float getPixelScale() {
-        return mTestHelperBridge.getOnScaleChangedHelper().getNewScale();
+        float newScale = mTestHelperBridge.getOnScaleChangedHelper().getNewScale();
+        if (Float.compare(newScale, 0.0f) != 0) {
+            return newScale;
+        } else {
+            // If page was loaded with initial scale or default scale, callback "onScaleChanged()"
+            // won't be triggered, the new scale is zero, return the default scale.
+            return (float)getDipScale();
+        }
     }
 
     protected void ensureScaleBecomes(final float targetScale) throws Throwable {

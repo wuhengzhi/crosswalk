@@ -784,10 +784,14 @@ public class XWalkSettingsInternal {
      * @hide
      */
     @CalledByNative
-    private boolean getAppCacheEnabled() {
+    private boolean getAppCacheEnabledLocked() {
         assert Thread.holdsLock(mXWalkSettingsLock);
-        // When no app cache path is set, use chromium default cache path.
-        return mAppCacheEnabled;
+        if (!mAppCacheEnabled) {
+            return false;
+        }
+        synchronized (sGlobalContentSettingsLock) {
+            return sAppCachePathIsSet;
+        }
     }
 
     /**
@@ -927,7 +931,7 @@ public class XWalkSettingsInternal {
                     @Override
                     public void run() {
                         if (mNativeXWalkSettings != 0) {
-                            nativeUpdateUserAgent(mNativeXWalkSettings);
+                            nativeUpdateUserAgentLocked(mNativeXWalkSettings);
                         }
                     }
                 });
@@ -972,7 +976,7 @@ public class XWalkSettingsInternal {
     private void updateWebkitPreferencesOnUiThreadLocked() {
         assert mEventHandler.mHandler != null;
         ThreadUtils.assertOnUiThread();
-        nativeUpdateWebkitPreferences(mNativeXWalkSettings);
+        nativeUpdateWebkitPreferencesLocked(mNativeXWalkSettings);
     }
 
      /**
@@ -989,7 +993,7 @@ public class XWalkSettingsInternal {
                 @Override
                 public void run() {
                     if (mNativeXWalkSettings != 0) {
-                        nativeUpdateAcceptLanguages(mNativeXWalkSettings);
+                        nativeUpdateAcceptLanguagesLocked(mNativeXWalkSettings);
                     }
                 }
             });
@@ -1023,7 +1027,7 @@ public class XWalkSettingsInternal {
                 @Override
                 public void run() {
                     if (mNativeXWalkSettings != 0) {
-                        nativeUpdateFormDataPreferences(mNativeXWalkSettings);
+                        nativeUpdateFormDataPreferencesLocked(mNativeXWalkSettings);
                     }
                 }
             });
@@ -1077,7 +1081,7 @@ public class XWalkSettingsInternal {
                 @Override
                 public void run() {
                     if (mNativeXWalkSettings != 0) {
-                        nativeUpdateInitialPageScale(mNativeXWalkSettings);
+                        nativeUpdateInitialPageScaleLocked(mNativeXWalkSettings);
                     }
                 }
             });
@@ -1421,6 +1425,14 @@ public class XWalkSettingsInternal {
         }
     }
 
+    @CalledByNative
+    private void populateWebPreferences(long webPrefsPtr) {
+        synchronized (mXWalkSettingsLock) {
+            assert mNativeXWalkSettings != 0;
+            nativePopulateWebPreferencesLocked(mNativeXWalkSettings, webPrefsPtr);
+        }
+    }
+
     private native long nativeInit(WebContents webContents);
 
     private native void nativeDestroy(long nativeXWalkSettings);
@@ -1429,15 +1441,17 @@ public class XWalkSettingsInternal {
 
     private native void nativeUpdateEverythingLocked(long nativeXWalkSettings);
 
-    private native void nativeUpdateUserAgent(long nativeXWalkSettings);
+    private native void nativeUpdateUserAgentLocked(long nativeXWalkSettings);
 
-    private native void nativeUpdateWebkitPreferences(long nativeXWalkSettings);
+    private native void nativeUpdateWebkitPreferencesLocked(long nativeXWalkSettings);
 
-    private native void nativeUpdateAcceptLanguages(long nativeXWalkSettings);
+    private native void nativeUpdateAcceptLanguagesLocked(long nativeXWalkSettings);
 
-    private native void nativeUpdateFormDataPreferences(long nativeXWalkSettings);
+    private native void nativeUpdateFormDataPreferencesLocked(long nativeXWalkSettings);
 
-    private native void nativeUpdateInitialPageScale(long nativeXWalkSettings);
+    private native void nativeUpdateInitialPageScaleLocked(long nativeXWalkSettings);
 
     private native void nativeResetScrollAndScaleState(long nativeXWalkSettings);
+
+    private native void nativePopulateWebPreferencesLocked(long nativeXWalkSettings, long webPrefsPtr);
 }

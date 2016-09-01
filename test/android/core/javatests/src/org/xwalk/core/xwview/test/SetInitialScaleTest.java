@@ -75,7 +75,7 @@ public class SetInitialScaleTest extends XWalkViewTestBase {
         final String page = "<html><body>"
                 + "<p style='height:" + height + "px;width:" + width + "px'>"
                 + "testSetInitialScale</p></body></html>";
-        final float defaultScaleFactor = 0;
+        final float defaultScaleFactor = 1.0f;
         final float defaultScale = getInstrumentation().getTargetContext(
                 ).getResources().getDisplayMetrics().density;
 

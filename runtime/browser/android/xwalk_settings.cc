@@ -30,6 +30,7 @@ using base::android::ConvertUTF8ToJavaString;
 using base::android::GetClass;
 using base::android::ScopedJavaLocalRef;
 using content::GetFieldID;
+using content::WebPreferences;
 
 namespace xwalk {
 
@@ -108,24 +109,61 @@ struct XWalkSettings::FieldIds {
   jfieldID initialize_at_minimum_page_scale;
 };
 
+namespace {
+void PopulateFixedWebPreferences(WebPreferences* web_prefs) {
+  web_prefs->shrinks_standalone_images_to_fit = false;
+  web_prefs->should_clear_document_background = false;
+  web_prefs->viewport_meta_enabled = true;
+}
+
+const void* const kXWalkSettingsUserDataKey = &kXWalkSettingsUserDataKey;
+};  // namespace
+
+class XWalkSettingsUserData : public base::SupportsUserData::Data {
+ public:
+  explicit XWalkSettingsUserData(XWalkSettings* ptr) : settings_(ptr) {}
+
+  static XWalkSettings* GetSettings(content::WebContents* web_contents) {
+    if (!web_contents)
+      return NULL;
+    XWalkSettingsUserData* data = static_cast<XWalkSettingsUserData*>(
+        web_contents->GetUserData(kXWalkSettingsUserDataKey));
+    return data ? data->settings_ : NULL;
+  }
+
+ private:
+  XWalkSettings* settings_;
+};
+
 XWalkSettings::XWalkSettings(JNIEnv* env,
                              jobject obj,
                              content::WebContents* web_contents)
     : WebContentsObserver(web_contents),
       xwalk_settings_(env, obj) {
+  web_contents->SetUserData(kXWalkSettingsUserDataKey,
+                            new XWalkSettingsUserData(this));
 }
 
 XWalkSettings::~XWalkSettings() {
-    JNIEnv* env = base::android::AttachCurrentThread();
-    ScopedJavaLocalRef<jobject> scoped_obj = xwalk_settings_.get(env);
-    jobject obj = scoped_obj.obj();
-    if (!obj) return;
-    Java_XWalkSettingsInternal_nativeXWalkSettingsGone(
-        env, obj, reinterpret_cast<intptr_t>(this));
+  if (web_contents()) {
+    web_contents()->SetUserData(kXWalkSettingsUserDataKey, NULL);
+  }
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> scoped_obj = xwalk_settings_.get(env);
+  jobject obj = scoped_obj.obj();
+  if (!obj) return;
+  Java_XWalkSettingsInternal_nativeXWalkSettingsGone(
+      env, obj, reinterpret_cast<intptr_t>(this));
 }
 
-void XWalkSettings::Destroy(JNIEnv* env, jobject obj) {
+void XWalkSettings::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   delete this;
+}
+
+XWalkSettings* XWalkSettings::FromWebContents(
+    content::WebContents* web_contents) {
+  return XWalkSettingsUserData::GetSettings(web_contents);
 }
 
 XWalkRenderViewHostExt* XWalkSettings::GetXWalkRenderViewHostExt() {
@@ -145,14 +183,16 @@ void XWalkSettings::UpdateEverything() {
   Java_XWalkSettingsInternal_updateEverything(env, obj);
 }
 
-void XWalkSettings::UpdateEverythingLocked(JNIEnv* env, jobject obj) {
-  UpdateInitialPageScale(env, obj);
-  UpdateWebkitPreferences(env, obj);
-  UpdateUserAgent(env, obj);
-  UpdateFormDataPreferences(env, obj);
+void XWalkSettings::UpdateEverythingLocked(JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  UpdateInitialPageScaleLocked(env, obj);
+  UpdateWebkitPreferencesLocked(env, obj);
+  UpdateUserAgentLocked(env, obj);
+  UpdateFormDataPreferencesLocked(env, obj);
 }
 
-void XWalkSettings::UpdateUserAgent(JNIEnv* env, jobject obj) {
+void XWalkSettings::UpdateUserAgentLocked(JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   if (!web_contents()) return;
 
   ScopedJavaLocalRef<jstring> str =
@@ -170,117 +210,141 @@ void XWalkSettings::UpdateUserAgent(JNIEnv* env, jobject obj) {
     controller.GetEntryAtIndex(i)->SetIsOverridingUserAgent(ua_overidden);
 }
 
-void XWalkSettings::UpdateWebkitPreferences(JNIEnv* env, jobject obj) {
+void XWalkSettings::UpdateWebkitPreferencesLocked(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   if (!web_contents()) return;
   XWalkRenderViewHostExt* render_view_host_ext = GetXWalkRenderViewHostExt();
   if (!render_view_host_ext) return;
-
-  if (!field_ids_)
-    field_ids_.reset(new FieldIds(env));
 
   content::RenderViewHost* render_view_host =
       web_contents()->GetRenderViewHost();
   if (!render_view_host) return;
   content::WebPreferences prefs = render_view_host->GetWebkitPreferences();
+  render_view_host->OnWebkitPreferencesChanged();
+}
 
-  prefs.allow_scripts_to_close_windows =
+void XWalkSettings::PopulateWebPreferences(WebPreferences* web_prefs) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  CHECK(env);
+  ScopedJavaLocalRef<jobject> scoped_obj = xwalk_settings_.get(env);
+  jobject obj = scoped_obj.obj();
+  if (!obj) return;
+  // Grab the lock and call PopulateWebPreferencesLocked.
+  Java_XWalkSettingsInternal_populateWebPreferences(
+      env, obj, reinterpret_cast<jlong>(web_prefs));
+}
+
+void XWalkSettings::PopulateWebPreferencesLocked(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jlong web_prefs_ptr) {
+  if (!web_contents()) return;
+  XWalkRenderViewHostExt* render_view_host_ext = GetXWalkRenderViewHostExt();
+  if (!render_view_host_ext) return;
+
+  WebPreferences* web_prefs = reinterpret_cast<WebPreferences*>(web_prefs_ptr);
+  PopulateFixedWebPreferences(web_prefs);
+
+  if (!field_ids_)
+    field_ids_.reset(new FieldIds(env));
+
+  web_prefs->allow_scripts_to_close_windows =
       env->GetBooleanField(obj, field_ids_->allow_scripts_to_close_windows);
 
   // Blink's LoadsImagesAutomatically and ImagesEnabled must be
   // set cris-cross to Android's. See
   // https://code.google.com/p/chromium/issues/detail?id=224317#c26
-  prefs.images_enabled =
+  web_prefs->images_enabled =
       env->GetBooleanField(obj, field_ids_->load_images_automatically);
-  prefs.loads_images_automatically =
+  web_prefs->loads_images_automatically =
       env->GetBooleanField(obj, field_ids_->images_enabled);
 
-  prefs.javascript_enabled =
+  web_prefs->javascript_enabled =
       env->GetBooleanField(obj, field_ids_->java_script_enabled);
 
-  prefs.allow_universal_access_from_file_urls = env->GetBooleanField(
+  web_prefs->allow_universal_access_from_file_urls = env->GetBooleanField(
       obj, field_ids_->allow_universal_access_from_file_urls);
 
-  prefs.allow_file_access_from_file_urls = env->GetBooleanField(
+  web_prefs->allow_file_access_from_file_urls = env->GetBooleanField(
       obj, field_ids_->allow_file_access_from_file_urls);
 
-  prefs.javascript_can_open_windows_automatically = env->GetBooleanField(
+  web_prefs->javascript_can_open_windows_automatically = env->GetBooleanField(
       obj, field_ids_->java_script_can_open_windows_automatically);
 
-  prefs.supports_multiple_windows = env->GetBooleanField(
+  web_prefs->supports_multiple_windows = env->GetBooleanField(
       obj, field_ids_->support_multiple_windows);
 
-  prefs.application_cache_enabled =
-      Java_XWalkSettingsInternal_getAppCacheEnabled(env, obj);
+  web_prefs->application_cache_enabled =
+      Java_XWalkSettingsInternal_getAppCacheEnabledLocked(env, obj);
 
-  prefs.local_storage_enabled = env->GetBooleanField(
+  web_prefs->local_storage_enabled = env->GetBooleanField(
       obj, field_ids_->dom_storage_enabled);
 
-  prefs.databases_enabled = env->GetBooleanField(
+  web_prefs->databases_enabled = env->GetBooleanField(
       obj, field_ids_->database_enabled);
 
-  prefs.initialize_at_minimum_page_scale =
+  web_prefs->initialize_at_minimum_page_scale =
       env->GetBooleanField(obj, field_ids_->initialize_at_minimum_page_scale);
-  prefs.double_tap_to_zoom_enabled = prefs.use_wide_viewport =
+  web_prefs->double_tap_to_zoom_enabled = web_prefs->use_wide_viewport =
       env->GetBooleanField(obj, field_ids_->use_wide_viewport);
 
-  prefs.user_gesture_required_for_media_playback = env->GetBooleanField(
+  web_prefs->user_gesture_required_for_media_playback = env->GetBooleanField(
       obj, field_ids_->media_playback_requires_user_gesture);
 
-  prefs.password_echo_enabled =
+  web_prefs->password_echo_enabled =
       Java_XWalkSettingsInternal_getPasswordEchoEnabledLocked(env, obj);
 
-  prefs.double_tap_to_zoom_enabled =
+  web_prefs->double_tap_to_zoom_enabled =
       Java_XWalkSettingsInternal_supportsDoubleTapZoomLocked(env, obj);
 
-  prefs.spatial_navigation_enabled = env->GetBooleanField(
+  web_prefs->spatial_navigation_enabled = env->GetBooleanField(
       obj, field_ids_->spatial_navigation_enabled);
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  prefs.allow_running_insecure_content =
+  web_prefs->allow_running_insecure_content =
       command_line->HasSwitch(switches::kAllowRunningInsecureContent);
-  prefs.allow_displaying_insecure_content =
+  web_prefs->allow_displaying_insecure_content =
       !command_line->HasSwitch(switches::kNoDisplayingInsecureContent);
 
   ScopedJavaLocalRef<jstring> str;
   str.Reset(
       env, static_cast<jstring>(
           env->GetObjectField(obj, field_ids_->default_video_poster_url)));
-  prefs.default_video_poster_url = str.obj() ?
+  web_prefs->default_video_poster_url = str.obj() ?
       GURL(ConvertJavaStringToUTF8(str)) : GURL();
 
   int text_size_percent = env->GetIntField(obj, field_ids_->text_size_percent);
 
-  prefs.text_autosizing_enabled =
+  web_prefs->text_autosizing_enabled =
       Java_XWalkSettingsInternal_getTextAutosizingEnabledLocked(env, obj);
-  if (prefs.text_autosizing_enabled) {
-    prefs.font_scale_factor = text_size_percent / 100.0f;
-    prefs.force_enable_zoom = text_size_percent >= 130;
+  if (web_prefs->text_autosizing_enabled) {
+    web_prefs->font_scale_factor = text_size_percent / 100.0f;
+    web_prefs->force_enable_zoom = text_size_percent >= 130;
     // Use the default zoom factor value when Text Autosizer is turned on.
     render_view_host_ext->SetTextZoomFactor(1);
   } else {
-    prefs.force_enable_zoom = false;
+    web_prefs->force_enable_zoom = false;
     render_view_host_ext->SetTextZoomFactor(text_size_percent / 100.0f);
   }
 
   int font_size = env->GetIntField(obj, field_ids_->default_font_size);
-  prefs.default_font_size = font_size;
+  web_prefs->default_font_size = font_size;
 
   int fixed_font_size = env->GetIntField(obj,
       field_ids_->default_fixed_font_size);
-  prefs.default_fixed_font_size = fixed_font_size;
+  web_prefs->default_fixed_font_size = fixed_font_size;
 
   bool support_quirks = env->GetBooleanField(
       obj, field_ids_->quirks_mode_enabled);
-  prefs.viewport_meta_non_user_scalable_quirk = support_quirks;
-  prefs.clobber_user_agent_initial_scale_quirk = support_quirks;
+  web_prefs->viewport_meta_non_user_scalable_quirk = support_quirks;
+  web_prefs->clobber_user_agent_initial_scale_quirk = support_quirks;
 
-  prefs.wide_viewport_quirk = true;
-  prefs.viewport_meta_enabled = true;
-
-  render_view_host->UpdateWebkitPreferences(prefs);
+  web_prefs->wide_viewport_quirk = true;
 }
 
-void XWalkSettings::UpdateFormDataPreferences(JNIEnv* env, jobject obj) {
+void XWalkSettings::UpdateFormDataPreferencesLocked(JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   if (!web_contents()) return;
   XWalkContent* content = XWalkContent::FromWebContents(web_contents());
   if (!content) return;
@@ -304,7 +368,8 @@ void XWalkSettings::RenderViewCreated(
   UpdateEverything();
 }
 
-void XWalkSettings::UpdateAcceptLanguages(JNIEnv* env, jobject obj) {
+void XWalkSettings::UpdateAcceptLanguagesLocked(JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   PrefService* pref_service = GetPrefs();
   if (!pref_service) return;
   pref_service->SetString(
@@ -331,7 +396,8 @@ GetDefaultUserAgent(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   return base::android::ConvertUTF8ToJavaString(env, GetUserAgent());
 }
 
-void XWalkSettings::UpdateInitialPageScale(JNIEnv* env, jobject obj) {
+void XWalkSettings::UpdateInitialPageScaleLocked(JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   if (!web_contents()) return;
   XWalkRenderViewHostExt* render_view_host_ext = GetXWalkRenderViewHostExt();
   if (!render_view_host_ext) return;
@@ -348,7 +414,8 @@ void XWalkSettings::UpdateInitialPageScale(JNIEnv* env, jobject obj) {
       initial_page_scale_percent / dip_scale / 100.0f);
 }
 
-void XWalkSettings::ResetScrollAndScaleState(JNIEnv* env, jobject obj) {
+void XWalkSettings::ResetScrollAndScaleState(JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   XWalkRenderViewHostExt* rvhe = GetXWalkRenderViewHostExt();
   if (!rvhe) return;
   rvhe->ResetScrollAndScaleState();

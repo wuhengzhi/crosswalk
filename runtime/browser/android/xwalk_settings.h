@@ -14,24 +14,44 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents_observer.h"
 
+namespace content {
+struct WebPreferences;
+}
+
 namespace xwalk {
 
 class XWalkRenderViewHostExt;
 
 class XWalkSettings : public content::WebContentsObserver {
  public:
+  static XWalkSettings* FromWebContents(content::WebContents* web_contents);
+
   XWalkSettings(JNIEnv* env, jobject obj, content::WebContents* web_contents);
   ~XWalkSettings() override;
 
   // Called from Java.
-  void Destroy(JNIEnv* env, jobject obj);
-  void ResetScrollAndScaleState(JNIEnv* env, jobject obj);
-  void UpdateEverythingLocked(JNIEnv* env, jobject obj);
-  void UpdateInitialPageScale(JNIEnv* env, jobject obj);
-  void UpdateUserAgent(JNIEnv* env, jobject obj);
-  void UpdateWebkitPreferences(JNIEnv* env, jobject obj);
-  void UpdateAcceptLanguages(JNIEnv* env, jobject obj);
-  void UpdateFormDataPreferences(JNIEnv* env, jobject obj);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void ResetScrollAndScaleState(JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void UpdateEverythingLocked(JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void UpdateInitialPageScaleLocked(JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void UpdateUserAgentLocked(JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void UpdateWebkitPreferencesLocked(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void UpdateAcceptLanguagesLocked(JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void UpdateFormDataPreferencesLocked(JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  void PopulateWebPreferencesLocked(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jlong web_prefs_ptr);
+
+  void PopulateWebPreferences(content::WebPreferences* web_prefs);
 
  private:
   struct FieldIds;

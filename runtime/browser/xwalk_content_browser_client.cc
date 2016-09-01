@@ -64,9 +64,11 @@
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
+#include "content/public/common/web_preferences.h"
 #include "xwalk/runtime/browser/android/xwalk_cookie_access_policy.h"
 #include "xwalk/runtime/browser/android/xwalk_contents_client_bridge.h"
 #include "xwalk/runtime/browser/android/xwalk_web_contents_view_delegate.h"
+#include "xwalk/runtime/browser/android/xwalk_web_preferences_populater_impl.h"
 #include "xwalk/runtime/browser/xwalk_browser_main_parts_android.h"
 #include "xwalk/runtime/common/android/xwalk_globals_android.h"
 #else
@@ -430,6 +432,22 @@ XWalkContentBrowserClient::CreateThrottlesForNavigation(
             navigation_handle));
   }
   return throttles;
+}
+
+void XWalkContentBrowserClient::OverrideWebkitPrefs(
+    content::RenderViewHost* rvh,
+    content::WebPreferences* web_prefs) {
+  if (!preferences_populater_.get()) {
+    preferences_populater_ =
+        base::WrapUnique(CreateWebPreferencesPopulater());
+  }
+  preferences_populater_->PopulateFor(
+      content::WebContents::FromRenderViewHost(rvh), web_prefs);
+}
+
+XWalkWebPreferencesPopulater*
+XWalkContentBrowserClient::CreateWebPreferencesPopulater() {
+  return new XWalkWebPreferencesPopulaterImpl();
 }
 #endif
 

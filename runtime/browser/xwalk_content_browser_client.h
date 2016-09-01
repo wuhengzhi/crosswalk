@@ -14,6 +14,7 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/main_function_params.h"
 #include "xwalk/runtime/browser/runtime_resource_dispatcher_host_delegate.h"
+#include "xwalk/runtime/browser/xwalk_web_preferences_populater.h"
 
 namespace content {
 class BrowserContext;
@@ -27,6 +28,8 @@ class WebContentsViewDelegate;
 namespace net {
 class URLRequestContextGetter;
 }
+
+struct WebPreferences;
 
 namespace xwalk {
 
@@ -161,6 +164,9 @@ class XWalkContentBrowserClient : public content::ContentBrowserClient {
 #if defined(OS_ANDROID)
   ScopedVector<content::NavigationThrottle> CreateThrottlesForNavigation(
       content::NavigationHandle* navigation_handle) override;
+ void OverrideWebkitPrefs(content::RenderViewHost* rvh,
+                          content::WebPreferences* web_prefs) override;
+ XWalkWebPreferencesPopulater* CreateWebPreferencesPopulater();
 #endif
 
  private:
@@ -175,6 +181,9 @@ class XWalkContentBrowserClient : public content::ContentBrowserClient {
 
   std::unique_ptr<RuntimeResourceDispatcherHostDelegate>
       resource_dispatcher_host_delegate_;
+#if defined(OS_ANDROID)
+  std::unique_ptr<XWalkWebPreferencesPopulater> preferences_populater_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(XWalkContentBrowserClient);
 };
